@@ -169,7 +169,15 @@ results/
 └── travel_report_2026-08-20.md
 ```
 
-## 원본 JSON
+### 프로그램 실행 화면
+
+프로그램 실행 시 날짜를 입력하고 여행 추천 및 맛집 검색 결과가 출력됩니다.
+
+![프로그램 실행 화면 1](02_program_execution1.png)
+
+![프로그램 실행 화면 2](02_program_execution2.png)
+
+### 원본 JSON
 
 원본 JSON에는 다음 정보가 포함됩니다.
 
@@ -183,7 +191,13 @@ results/
 - 오류 정보
 ```
 
-## 최종 Markdown 리포트
+#### 원본 JSON 결과
+
+Gemini 여행 추천 결과와 Kakao 맛집 검색 결과가 JSON 파일로 저장됩니다.
+
+![JSON 결과](03_json_result.png)
+
+### 최종 Markdown 리포트
 
 최종 리포트에는 다음 내용이 포함됩니다.
 
@@ -195,6 +209,14 @@ results/
 - 추천 맛집
 - 1일 여행 일정
 ```
+
+#### 최종 여행 리포트
+
+생성된 여행 리포트는 Markdown 파일로 저장됩니다.
+
+![최종 여행 리포트 1](04_final_travel_report1.png)
+
+![최종 여행 리포트 2](04_final_travel_report2.png)
 
 ## 11. 오류 처리
 
@@ -256,17 +278,27 @@ Gemini 및 Kakao API 호출을 생략하고 저장된 데이터를 재사용합�
 
 이를 통해 동일한 날짜에 대한 불필요한 API 호출을 줄일 수 있습니다.
 
+## 14. 보너스 과제 - 결과 캐싱
 
-## 14. 학습 목표
+같은 날짜의 결과 데이터가 이미 존재하는 경우 Gemini 및 Kakao API를 다시 호출하지 않고
+기존 데이터를 재사용합니다.
+
+이를 통해 동일한 날짜에 대한 불필요한 API 호출을 줄일 수 있습니다.
+
+![결과 캐싱 실행 화면](07_bonus_caching.png)
+
+
+## 15. 학습 목표
 
 이 프로젝트를 통해 다음 내용을 학습했습니다.
 
-REST API의 요청과 응답 구조
-HTTP GET/POST 방식의 차이
-LLM API의 JSON 구조화
-LLM 결과를 다음 API 요청의 입력으로 활용하는 방법
-외부 API의 인증, 네트워크, 쿼터, 파싱 오류 처리
-.env와 환경변수를 이용한 API 키 관리
-Python CLI 프로그램 구현
-JSON 및 Markdown 파일 저장
+- REST API의 요청과 응답 구조
+- HTTP GET/POST 방식의 차이
+- LLM API의 JSON 구조화
+- LLM 결과를 다음 API 요청의 입력으로 활용하는 방법
+- 외부 API의 인증, 네트워크, 쿼터, 파싱 오류 처리
+- .env와 환경변수를 이용한 API 키 관리
+- Python CLI 프로그램 구현
+- JSON 및 Markdown 파일 저장
+- 기존 결과 데이터를 활용한 API 호출 최적화
 
