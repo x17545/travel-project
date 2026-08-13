@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -145,6 +146,20 @@ def save_raw_data(date_string, recommendation, restaurants, errors):
         )
 
     return file_path
+
+def get_cached_data(date):
+    """
+    같은 날짜의 기존 원본 JSON 파일이 있으면 읽어온다.
+    파일이 없으면 None을 반환한다.
+    """
+
+    raw_file = Path("results") / f"travel_{date}.json"
+
+    if not raw_file.exists():
+        return None
+
+    with open(raw_file, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def generate_final_report(recommendation, restaurants, errors):
 
@@ -362,122 +377,151 @@ def main():
         print(".env 파일에 GEMINI_API_KEY를 설정해주세요.")
         return
 
-    print("Gemini API 호출 중...")
+    cached_data = get_cached_data(args.date)
 
-    try:
-        recommendation = get_travel_recommendation(args.date)
+    if cached_data:
+        print("기존 결과 데이터를 발견했습니다.")
+        print("API 호출을 건너뛰고 저장된 데이터를 사용합니다.")
 
-        print("\n1차 여행 추천 결과:")
+        recommendation = cached_data["recommendation"]
+        restaurants = cached_data["restaurants"]
+        errors = cached_data.get("errors", [])
 
-        print("추천 지역:", recommendation["recommended_city"])
-        print("날씨:", recommendation["weather"])
+    else:
+        print("새로운 여행 추천 데이터를 생성합니다.")
+        print("Gemini API 호출 중...")
 
-        print("행사:")
-        for event in recommendation["events"]:
-            print("-", event)
+        try:
+            recommendation = get_travel_recommendation(args.date)
 
-        print("추천 이유:")
-        print(recommendation["reason"])
+            print("\n1차 여행 추천 결과:")
 
-        print("\nKakao 맛집 검색 중...")
+            print("추천 지역:", recommendation["recommended_city"])
+            print("날씨:", recommendation["weather"])
 
-        if not KAKAO_REST_API_KEY:
-            print("KAKAO_REST_API_KEY가 설정되지 않았습니다.")
+            print("행사:")
+            for event in recommendation["events"]:
+                print("-", event)
 
-            errors.append({
-                "step": "kakao_api_key",
-                "message": "KAKAO_REST_API_KEY가 설정되지 않았습니다."
-            })
+            print("추천 이유:")
+            print(recommendation["reason"])
 
-            restaurants = []
-        else:
-            try:
-                restaurants = search_restaurants(
-                      recommendation["recommended_city"]
-                )
+            print("\nKakao 맛집 검색 중...")
 
-                print(f"맛집 검색 결과: {len(restaurants)}곳")
-
-                for restaurant in restaurants:
-                    print("\n맛집 이름:", restaurant["name"])
-                    print("주소:", restaurant["address"])
-                    print("카테고리:", restaurant["category"])
-                    print("URL:", restaurant["url"])
-                    print("좌표:", restaurant["x"], restaurant["y"])
-
-                raw_file = save_raw_data(
-                    args.date,
-                    recommendation,
-                    restaurants,
-                    errors
-                )
-
-                print(f"\n원본 데이터 저장 완료: {raw_file}")
-                    
-                print("\n최종 여행 리포트 생성 중...")
-
-                try:
-                    report = generate_final_report(
-                        recommendation,
-                        restaurants,
-                        errors
-                    )
-
-                    report_file = save_report(
-                        args.date,
-                        report
-                    )
-
-                    print(f"최종 여행 리포트 저장 완료: {report_file}")
-
-                    print("\n" + "=" * 50)
-                    print("여행 추천 프로그램 실행 완료")
-                    print("=" * 50)
-
-                    print("\n원본 데이터:")
-                    print(f"  {raw_file}")
-
-                    print("\n최종 여행 리포트:")
-                    print(f"  {report_file}")
-
-                    print("\nresults 폴더에서 결과 파일을 확인할 수 있습니다.")
-
-                except requests.RequestException as e:
-                    print("최종 리포트 생성 중 Gemini API 오류가 발생했습니다.")
-                    print(e)
-
-                    errors.append({
-                        "step": "final_report",
-                        "message": str(e)
-                    })
-
-            except requests.RequestException as e:
-                print("Kakao 맛집 검색 중 오류가 발생했습니다.")
-                print(e)
+            if not KAKAO_REST_API_KEY:
+                print("KAKAO_REST_API_KEY가 설정되지 않았습니다.")
 
                 errors.append({
-                    "step": "kakao_restaurant_search",
-                    "message": str(e)
+                    "step": "kakao_api_key",
+                    "message": "KAKAO_REST_API_KEY가 설정되지 않았습니다."
                 })
 
                 restaurants = []
 
-    except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
-        print("Gemini 여행 추천 처리 중 오류가 발생했습니다.")
+            else:
+                try:
+                    restaurants = search_restaurants(
+                        recommendation["recommended_city"]
+                    )
+
+                    print(f"맛집 검색 결과: {len(restaurants)}곳")
+
+                    for restaurant in restaurants:
+                        print("\n맛집 이름:", restaurant["name"])
+                        print("주소:", restaurant["address"])
+                        print("카테고리:", restaurant["category"])
+                        print("URL:", restaurant["url"])
+                        print("좌표:", restaurant["x"], restaurant["y"])
+
+                except requests.RequestException as e:
+                    print("Kakao 맛집 검색 중 오류가 발생했습니다.")
+                    print(e)
+
+                    errors.append({
+                        "step": "kakao_restaurant_search",
+                        "message": str(e)
+                    })
+
+                    restaurants = []
+
+            raw_file = save_raw_data(
+                args.date,
+                recommendation,
+                restaurants,
+                errors
+            )
+
+            print(f"\n원본 데이터 저장 완료: {raw_file}")
+
+        except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
+            print("Gemini 여행 추천 처리 중 오류가 발생했습니다.")
+            print(e)
+
+            errors.append({
+                "step": "recommendation",
+                "message": str(e)
+            })
+
+            return
+
+        except (KeyError, IndexError) as e:
+            print("Gemini 응답 형식을 처리하는 중 오류가 발생했습니다.")
+            print(e)
+
+            errors.append({
+                "step": "recommendation_format",
+                "message": str(e)
+            })
+
+            return
+
+    print("\n최종 여행 리포트 생성 중...")
+
+    try:
+        report = generate_final_report(
+            recommendation,
+            restaurants,
+            errors
+        )
+
+        report_file = save_report(
+            args.date,
+            report
+        )
+
+        print(f"최종 여행 리포트 저장 완료: {report_file}")
+
+        print("\n" + "=" * 50)
+        print("여행 추천 프로그램 실행 완료")
+        print("=" * 50)
+
+        print("\n원본 데이터:")
+
+        raw_file = save_raw_data(
+            args.date,
+            recommendation,
+            restaurants,
+            errors
+        )
+
+        print(f"  {raw_file}")
+
+        print("\n최종 여행 리포트:")
+        print(f"  {report_file}")
+
+        print("\nresults 폴더에서 결과 파일을 확인할 수 있습니다.")
+
+    except requests.RequestException as e:
+        print("최종 리포트 생성 중 Gemini API 오류가 발생했습니다.")
         print(e)
 
         errors.append({
-            "step": "recommendation",
+            "step": "final_report",
             "message": str(e)
         })
-
-        return
-
-    except (KeyError, IndexError) as e:
-        print("Gemini 응답 형식을 처리하는 중 오류가 발생했습니다.")
-        print(e)
 
 
 if __name__ == "__main__":
     main()
+
 
