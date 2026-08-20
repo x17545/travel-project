@@ -6,6 +6,8 @@ Python 프로그램입니다.
 
 이 프로그램은 터미널에서 실행하는 **CLI(Command Line Interface) 프로그램**입니다.
 
+![프로그램 흐름](01_program_flow.png)
+
 사용자는 여행 날짜만 입력하면 됩니다.
 
 예:
