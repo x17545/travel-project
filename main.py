@@ -292,6 +292,23 @@ def get_travel_recommendation(date_string):
         if not all(key in recommendation for key in required_keys):
             raise ValueError("필수 JSON 키가 누락되었습니다.")
 
+        # JSON 데이터 타입 검사
+        if not isinstance(recommendation["recommended_city"], str):
+            raise ValueError("recommended_city는 문자열이어야 합니다.")
+
+        if not isinstance(recommendation["weather"], str):
+            raise ValueError("weather는 문자열이어야 합니다.")
+
+        if not isinstance(recommendation["events"], list):
+            raise ValueError("events는 리스트여야 합니다.")
+
+        if not isinstance(recommendation["reason"], str):
+            raise ValueError("reason은 문자열이어야 합니다.")
+
+        # events 리스트 안의 값도 문자열인지 검사
+        if not all(isinstance(event, str) for event in recommendation["events"]):
+            raise ValueError("events의 각 항목은 문자열이어야 합니다.")
+
         return recommendation
 
     except json.JSONDecodeError:
