@@ -125,13 +125,24 @@ def search_restaurants(city, limit=5):
 
     return restaurants
 
-def save_raw_data(date_string, recommendation, restaurants, errors):
+def save_raw_data(
+    date_string,
+    recommendation,
+    restaurants,
+    errors,
+    city
+):
     os.makedirs("results", exist_ok=True)
 
-    file_path = f"results/travel_{date_string}.json"
+    safe_city = make_safe_filename(city)
+
+    file_path = (
+        f"results/travel_{date_string}_{safe_city}.json"
+    )
 
     data = {
         "date": date_string,
+        "city": city,
         "recommendation": recommendation,
         "restaurants": restaurants,
         "errors": errors
@@ -147,13 +158,13 @@ def save_raw_data(date_string, recommendation, restaurants, errors):
 
     return file_path
 
-def get_cached_data(date):
-    """
-    같은 날짜의 기존 원본 JSON 파일이 있으면 읽어온다.
-    파일이 없으면 None을 반환한다.
-    """
+def get_cached_data(date, city):
+    safe_city = make_safe_filename(city)
 
-    raw_file = Path("results") / f"travel_{date}.json"
+    raw_file = (
+        Path("results")
+        / f"travel_{date}_{safe_city}.json"
+    )
 
     if not raw_file.exists():
         return None
@@ -231,10 +242,14 @@ Markdown 코드 블록으로 감싸지 말고 순수 Markdown만 출력하세요
 
     return call_gemini(prompt)
 
-def save_report(date_string, report):
+def save_report(date_string, report, city):
     os.makedirs("results", exist_ok=True)
 
-    file_path = f"results/travel_report_{date_string}.md"
+    safe_city = make_safe_filename(city)
+
+    file_path = (
+        f"results/travel_report_{date_string}_{safe_city}.md"
+    )
 
     with open(file_path, "w", encoding="utf-8") as file:
         file.write(report)
@@ -245,31 +260,36 @@ def save_report(date_string, report):
 # 여행 추천 JSON 요청
 # --------------------------------------------------
 
-def get_travel_recommendation(date_string):
+def get_travel_recommendation(date_string, city):
 
     prompt = f"""
 여행 날짜는 {date_string}입니다.
+사용자가 선택한 여행 지역은 "{city}"입니다.
 
-한국 국내 여행지를 하나 추천해주세요.
+사용자가 입력한 "{city}"를 다른 지역으로 변경하거나
+새로운 여행지를 추천하지 마세요.
 
-해당 날짜의 실제 날씨를 조회하는 것이 아니라,
-해당 시기의 일반적인 계절 날씨와 여행 특성을 기준으로 추천해주세요.
+반드시 "{city}"를 기준으로 여행 정보를 작성해주세요.
 
-반드시 아래 JSON 형식으로만 답변해주세요.
+해당 날짜의 실제 실시간 날씨를 조회하는 것이 아니라,
+해당 시기의 일반적인 계절 날씨와 여행 특성을 기준으로 작성해주세요.
+
+반드시 아래 JSON 형식으로만 응답해주세요.
 
 {{
-  "recommended_city": "도시 이름",
+  "recommended_city": "{city}",
   "weather": "해당 시기의 일반적인 날씨 요약",
   "events": [
     "행사 또는 축제 후보 1",
     "행사 또는 축제 후보 2"
   ],
-  "reason": "추천 근거를 2~4문장으로 작성"
+  "reason": "{city}을 여행하기 좋은 이유를 2~4문장으로 작성"
 }}
 
 주의사항:
 - JSON 이외의 설명은 작성하지 마세요.
-- recommended_city는 문자열 하나만 작성하세요.
+- recommended_city에는 반드시 "{city}"를 그대로 작성하세요.
+- 다른 도시를 추천하지 마세요.
 - weather는 문자열이어야 합니다.
 - events는 문자열 배열이어야 합니다.
 - events는 1~3개를 작성하세요.
@@ -279,7 +299,6 @@ def get_travel_recommendation(date_string):
     text = call_gemini(prompt)
 
     try:
-        # Gemini가 반환한 JSON 문자열을 Python dictionary로 변환
         recommendation = json.loads(text)
 
         required_keys = [
@@ -292,7 +311,6 @@ def get_travel_recommendation(date_string):
         if not all(key in recommendation for key in required_keys):
             raise ValueError("필수 JSON 키가 누락되었습니다.")
 
-        # JSON 데이터 타입 검사
         if not isinstance(recommendation["recommended_city"], str):
             raise ValueError("recommended_city는 문자열이어야 합니다.")
 
@@ -305,9 +323,47 @@ def get_travel_recommendation(date_string):
         if not isinstance(recommendation["reason"], str):
             raise ValueError("reason은 문자열이어야 합니다.")
 
-        # events 리스트 안의 값도 문자열인지 검사
-        if not all(isinstance(event, str) for event in recommendation["events"]):
+        if not all(
+            isinstance(event, str)
+            for event in recommendation["events"]
+        ):
             raise ValueError("events의 각 항목은 문자열이어야 합니다.")
+
+        # 사용자가 입력한 지역을 확실하게 유지
+        recommendation["recommended_city"] = city
+
+        return recommendation
+
+    except json.JSONDecodeError:
+        print("Gemini JSON 파싱에 실패했습니다.")
+        print("JSON 형식으로 다시 요청합니다.")
+
+        retry_prompt = f"""
+사용자가 선택한 여행 지역은 "{city}"입니다.
+여행 날짜는 {date_string}입니다.
+
+다른 지역을 추천하지 마세요.
+반드시 "{city}"를 기준으로 작성하세요.
+
+아래 JSON 형식으로만 다시 출력해주세요.
+
+{{
+  "recommended_city": "{city}",
+  "weather": "날씨 요약",
+  "events": [
+    "행사 또는 축제 1",
+    "행사 또는 축제 2"
+  ],
+  "reason": "여행 추천 이유"
+}}
+
+JSON 이외의 내용은 작성하지 마세요.
+"""
+
+        retry_text = call_gemini(retry_prompt)
+        recommendation = json.loads(retry_text)
+
+        recommendation["recommended_city"] = city
 
         return recommendation
 
@@ -367,25 +423,28 @@ def main():
 
     errors = []
 
-    parser = argparse.ArgumentParser(
-        description="AI 여행 추천 프로그램"
-    )
+    date_string = input("여행 날짜를 입력해주세요 (YYYY-MM-DD): ").strip()
 
-    parser.add_argument(
-        "-date",
-        required=True,
-        help="여행 날짜 (YYYY-MM-DD 형식)"
-    )
+    if not validate_date(date_string):
+        print("잘못된 날짜 형식입니다.")
+        print("예: 2026-08-15")
+        return
 
-    args = parser.parse_args()
+    selected_city = input(
+        "맛집을 찾고 싶은 장소 또는 지역을 입력해주세요: "
+    ).strip()
+
+    if not selected_city:
+        print("지역을 입력해주세요.")
+        return
 
     # 날짜 검증
-    if not validate_date(args.date):
+    if not validate_date(date_string):
         print("잘못된 날짜 형식입니다.")
         print("사용법: python main.py -date YYYY-MM-DD")
         return
 
-    print(f"입력 날짜: {args.date}")
+    print(f"입력 날짜: {date_string}")
     print("날짜 형식이 올바릅니다.")
 
     # API 키 확인
@@ -394,7 +453,10 @@ def main():
         print(".env 파일에 GEMINI_API_KEY를 설정해주세요.")
         return
 
-    cached_data = get_cached_data(args.date)
+    cached_data = get_cached_data(
+        date_string,
+        selected_city
+    )
 
     if cached_data:
         print("기존 결과 데이터를 발견했습니다.")
@@ -404,16 +466,22 @@ def main():
         restaurants = cached_data["restaurants"]
         errors = cached_data.get("errors", [])
 
+        safe_city = make_safe_filename(selected_city)
+        raw_file = f"results/travel_{date_string}_{safe_city}.json"
+
     else:
         print("새로운 여행 추천 데이터를 생성합니다.")
         print("Gemini API 호출 중...")
 
         try:
-            recommendation = get_travel_recommendation(args.date)
+            recommendation = get_travel_recommendation(
+                date_string,
+                selected_city
+            )
 
-            print("\n1차 여행 추천 결과:")
+            print("\n여행 지역 정보:")
 
-            print("추천 지역:", recommendation["recommended_city"])
+            print("선택 지역:", recommendation["recommended_city"])
             print("날씨:", recommendation["weather"])
 
             print("행사:")
@@ -437,9 +505,7 @@ def main():
 
             else:
                 try:
-                    restaurants = search_restaurants(
-                        recommendation["recommended_city"]
-                    )
+                    restaurants = search_restaurants(selected_city)
 
                     print(f"맛집 검색 결과: {len(restaurants)}곳")
 
@@ -462,10 +528,11 @@ def main():
                     restaurants = []
 
             raw_file = save_raw_data(
-                args.date,
+                date_string,
                 recommendation,
                 restaurants,
-                errors
+                errors,
+                selected_city
             )
 
             print(f"\n원본 데이터 저장 완료: {raw_file}")
@@ -502,8 +569,9 @@ def main():
         )
 
         report_file = save_report(
-            args.date,
-            report
+            date_string,
+            report,
+            selected_city
         )
 
         print(f"최종 여행 리포트 저장 완료: {report_file}")
@@ -513,14 +581,6 @@ def main():
         print("=" * 50)
 
         print("\n원본 데이터:")
-
-        raw_file = save_raw_data(
-            args.date,
-            recommendation,
-            restaurants,
-            errors
-        )
-
         print(f"  {raw_file}")
 
         print("\n최종 여행 리포트:")
@@ -536,6 +596,16 @@ def main():
             "step": "final_report",
             "message": str(e)
         })
+
+def make_safe_filename(text):
+    safe_text = text.strip()
+
+    for char in '<>:"/\\|?*':
+        safe_text = safe_text.replace(char, "_")
+
+    safe_text = safe_text.replace(" ", "_")
+
+    return safe_text
 
 
 if __name__ == "__main__":
